@@ -3,6 +3,15 @@
 #include <windows.h>
 #include <vector>
 #include <sstream>
+#include <map>
+#include <iomanip>
+#include <filesystem>
+#include <fstream>
+#include <chrono>
+#include <thread>
+#include <random>
+
+namespace fs = std::filesystem;
 
 void setConsoleColor(int textColor, int bgColor) {
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -13,6 +22,8 @@ class Terminal {
 public:
     void run() {
         printWelcomeMessage();
+        loadCommandHistory();
+        loadAliases();
 
         std::string command;
         while (true) {
@@ -26,14 +37,19 @@ public:
             }
 
             if (command == "exit") {
+                saveAliases();
                 break;
             }
 
+            addCommandToHistory(command);
             executeCommand(command);
         }
     }
 
 private:
+    std::vector<std::string> commandHistory;
+    std::map<std::string, std::string> aliases;
+
     void printWelcomeMessage() {
         setConsoleColor(9, 0); 
         std::cout << R"(
@@ -46,33 +62,53 @@ private:
                                          
         )" << std::endl;
         setConsoleColor(7, 0); 
-        std::cout << "Willkommen beim Aether Terminal!\n";
-        std::cout << "Tippe 'help' für eine Liste der Befehle.\n" << std::endl;
+        std::cout << "Welcome to the Aether Terminal.\n";
+        std::cout << "(C) 2024 CaydenDev. Licensed under the MIT license.\n";
+        std::cout << "Type 'help' for a list of commands.\n" << std::endl;
+    }
+
+    void loadCommandHistory() {
+        commandHistory = {"help", "cls", "exit", "time", "calc"};
+    }
+
+    void loadAliases() {
+        aliases = {
+            {"ll", "dir /w"},
+            {"open", "start"},
+            {"copy", "copy"},
+            {"move", "move"}
+        };
+    }
+
+    void saveAliases() {
+        std::ofstream aliasFile("aliases.txt");
+        for (const auto& pair : aliases) {
+            aliasFile << pair.first << "=" << pair.second << std::endl;
+        }
+    }
+
+    void addCommandToHistory(const std::string& command) {
+        commandHistory.push_back(command);
     }
 
     void printHelp() {
         setConsoleColor(7, 0); 
-        std::cout << "Verfügbare Befehle:\n";
-        std::cout << "  help        - Zeigt diese Hilfe an\n";
-        std::cout << "  cls         - Löscht den Bildschirm\n";
-        std::cout << "  exit        - Beendet das Terminal\n";
-        std::cout << "  echo [text] - Gibt den angegebenen Text aus\n";
-        std::cout << "  time        - Zeigt die aktuelle Zeit an\n";
-        std::cout << "  calc        - Startet den Windows-Rechner\n";
-        std::cout << "  dir         - Listet die Dateien im aktuellen Verzeichnis auf\n";
-        std::cout << "  cd [dir]    - Wechselt das Verzeichnis\n";
-        std::cout << "  mkdir [dir] - Erstellt ein neues Verzeichnis\n";
-        std::cout << "  rmdir [dir] - Löscht ein leeres Verzeichnis\n";
-        std::cout << "  del [file]  - Löscht eine Datei\n";
-        std::cout << "  copy [src] [dest] - Kopiert eine Datei\n";
-        std::cout << "  move [src] [dest] - Verschiebt eine Datei\n";
-        std::cout << "  ping [addr] - Prüft die Erreichbarkeit einer Adresse\n";
-        std::cout << "  ipconfig    - Zeigt die Netzwerkinformationen an\n";
-        std::cout << "  tasklist    - Listet alle laufenden Prozesse auf\n";
-        std::cout << "  taskkill [pid] - Beendet einen Prozess anhand seiner PID\n";
-        std::cout << "  systeminfo   - Zeigt Systeminformationen an\n";
-        std::cout << "  notepad      - Öffnet den Windows-Editor\n";
-        std::cout << "  shutdown     - Fährt den Computer herunter\n";
+        std::cout << "Available commands:\n";
+        std::cout << "  help        - Shows this help\n";
+        std::cout << "  cls         - Clears the screen\n";
+        std::cout << "  exit        - Exits the terminal\n";
+        std::cout << "  echo [text] - Outputs the specified text\n";
+        std::cout << "  time        - Shows the current time\n";
+        std::cout << "  calc        - Starts the Windows calculator\n";
+        std::cout << "  history     - Shows command history\n";
+        std::cout << "  alias       - Shows defined aliases\n";
+        std::cout << "  setalias [alias] [command] - Sets an alias for a command\n";
+        std::cout << "  create [filename] - Creates a file\n";
+        std::cout << "  delete [filename] - Deletes a file\n";
+        std::cout << "  list        - Lists files in the current directory\n";
+        std::cout << "  ping [host] - Executes a ping command\n";
+        std::cout << "  random      - Generates a random number\n";
+        std::cout << "  sleep [seconds] - Pauses execution for a specified number of seconds\n";
         std::cout << std::endl;
     }
 
@@ -89,10 +125,43 @@ private:
         } else if (command == "time") {
             SYSTEMTIME st;
             GetLocalTime(&st);
-            std::cout << "Aktuelle Zeit: " << st.wHour << ":" << st.wMinute << ":" << st.wSecond << std::endl;
+            std::cout << "Current time: " << st.wHour << ":" << st.wMinute << ":" << st.wSecond << std::endl;
             return;
         } else if (command == "calc") {
             system("start calc");
+            return;
+        } else if (command == "history") {
+            printHistory();
+            return;
+        } else if (command == "alias") {
+            printAliases();
+            return;
+        } else if (command.substr(0, 8) == "setalias ") {
+            setAlias(command.substr(8));
+            return;
+        } else if (command.substr(0, 6) == "create ") {
+            createFile(command.substr(7));
+            return;
+        } else if (command.substr(0, 7) == "delete ") {
+            deleteFile(command.substr(7));
+            return;
+        } else if (command == "list") {
+            listFiles();
+            return;
+        } else if (command.substr(0, 5) == "ping ") {
+            pingHost(command.substr(5));
+            return;
+        } else if (command == "random") {
+            generateRandomNumber();
+            return;
+        } else if (command.substr(0, 6) == "sleep ") {
+            sleepForSeconds(command.substr(6));
+            return;
+        }
+
+        
+        if (aliases.find(command) != aliases.end()) {
+            executeCommand(aliases[command]);
             return;
         }
 
@@ -115,9 +184,84 @@ private:
         } else {
             setConsoleColor(12, 0); 
             DWORD errorCode = GetLastError();
-            std::cerr << "⚠️  Fehler: Befehl konnte nicht ausgeführt werden! Fehlercode: " << errorCode << std::endl;
+            std::cerr << "⚠️  Error: Command could not be executed! Error code: " << errorCode << std::endl;
             setConsoleColor(7, 0); 
         }
+    }
+
+    void setAlias(const std::string& aliasCommand) {
+        std::istringstream iss(aliasCommand);
+        std::string alias, command;
+        if (iss >> alias) {
+            std::getline(iss, command);
+            command.erase(0, command.find_first_not_of(" ")); 
+            aliases[alias] = command;
+            std::cout << "Alias '" << alias << "' set for: " << command << std::endl;
+        } else {
+            std::cout << "Invalid alias command. Use: setalias [alias] [command]" << std::endl;
+        }
+    }
+
+    void printHistory() {
+        setConsoleColor(7, 0);
+        std::cout << "Command history:\n";
+        for (const auto& cmd : commandHistory) {
+            std::cout << "  " << cmd << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
+    void printAliases() {
+        setConsoleColor(7, 0);
+        std::cout << "Defined aliases:\n";
+        for (const auto& pair : aliases) {
+            std::cout << "  " << pair.first << " -> " << pair.second << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
+    void createFile(const std::string& filename) {
+        std::ofstream file(filename);
+        if (file) {
+            std::cout << "File '" << filename << "' created." << std::endl;
+        } else {
+            std::cerr << "Error creating file '" << filename << "'." << std::endl;
+        }
+    }
+
+    void deleteFile(const std::string& filename) {
+        if (fs::remove(filename)) {
+            std::cout << "File '" << filename << "' deleted." << std::endl;
+        } else {
+            std::cerr << "Error deleting file '" << filename << "'." << std::endl;
+        }
+    }
+
+        void listFiles() {
+        std::cout << "Files in the current directory:\n";
+        for (const auto& entry : fs::directory_iterator(fs::current_path())) {
+            std::cout << "  " << entry.path().filename().string() << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
+    void pingHost(const std::string& host) {
+        std::string command = "ping " + host;
+        system(command.c_str());
+    }
+
+    void generateRandomNumber() {
+        std::random_device rd;  
+        std::mt19937 gen(rd()); 
+        std::uniform_int_distribution<> dis(1, 100); 
+        std::cout << "Random number: " << dis(gen) << std::endl;
+    }
+
+    void sleepForSeconds(const std::string& secondsStr) {
+        int seconds = std::stoi(secondsStr);
+        std::cout << "Sleeping for " << seconds << " seconds...\n";
+        std::this_thread::sleep_for(std::chrono::seconds(seconds));
+        std::cout << "Awake!" << std::endl;
     }
 };
 

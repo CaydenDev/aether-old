@@ -10,6 +10,11 @@
 #include <chrono>
 #include <thread>
 #include <random>
+#include <conio.h>
+#include <algorithm>
+#include <ctime>
+#include <cstdlib>
+#include <iomanip>
 
 namespace fs = std::filesystem;
 
@@ -24,17 +29,17 @@ public:
         printWelcomeMessage();
         loadCommandHistory();
         loadAliases();
+        loadThemes();
 
         std::string command;
         while (true) {
-            setConsoleColor(10, 0); 
+            setConsoleColor(currentTheme["promptTextColor"], currentTheme["promptBgColor"]);
             std::cout << "Aether > ";
-            setConsoleColor(7, 0); 
-            std::getline(std::cin, command);
+            setConsoleColor(currentTheme["defaultTextColor"], currentTheme["defaultBgColor"]);
 
-            if (command.empty()) {
-                continue;
-            }
+            command = getCommandInput();
+
+            if (command.empty()) continue;
 
             if (command == "exit") {
                 saveAliases();
@@ -42,16 +47,22 @@ public:
             }
 
             addCommandToHistory(command);
+            auto start = std::chrono::high_resolution_clock::now();
             executeCommand(command);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            std::cout << "Command executed in " << duration << " ms." << std::endl;
         }
     }
 
 private:
     std::vector<std::string> commandHistory;
     std::map<std::string, std::string> aliases;
+    std::map<std::string, int> currentTheme;
+    int historyIndex = -1;
 
     void printWelcomeMessage() {
-        setConsoleColor(9, 0); 
+        setConsoleColor(9, 0);
         std::cout << R"(
          ___           _       _        
         / _ \         | |     | |       
@@ -61,23 +72,27 @@ private:
        \_| |_/_| |_|\__,_|\__,_|_|\__,_|
                                          
         )" << std::endl;
-        setConsoleColor(7, 0); 
+        setConsoleColor(7, 0);
         std::cout << "Welcome to the Aether Terminal.\n";
         std::cout << "(C) 2024 CaydenDev. Licensed under the MIT license.\n";
         std::cout << "Type 'help' for a list of commands.\n" << std::endl;
     }
 
     void loadCommandHistory() {
-        commandHistory = {"help", "cls", "exit", "time", "calc"};
+        commandHistory = {"help", "cls", "exit", "time", "calc", "random", "echo"};
     }
 
     void loadAliases() {
-        aliases = {
-            {"ll", "dir /w"},
-            {"open", "start"},
-            {"copy", "copy"},
-            {"move", "move"}
-        };
+        std::ifstream aliasFile("aliases.txt");
+        std::string line;
+        while (std::getline(aliasFile, line)) {
+            size_t pos = line.find("=");
+            if (pos != std::string::npos) {
+                std::string alias = line.substr(0, pos);
+                std::string command = line.substr(pos + 1);
+                aliases[alias] = command;
+            }
+        }
     }
 
     void saveAliases() {
@@ -87,162 +102,223 @@ private:
         }
     }
 
-    void addCommandToHistory(const std::string& command) {
-        commandHistory.push_back(command);
+    void loadThemes() {
+        currentTheme = {
+            {"promptTextColor", 10},
+            {"promptBgColor", 0},
+            {"defaultTextColor", 7},
+            {"defaultBgColor", 0}
+        };
     }
 
-    void printHelp() {
-        setConsoleColor(7, 0); 
-        std::cout << "Available commands:\n";
-        std::cout << "  help        - Shows this help\n";
-        std::cout << "  cls         - Clears the screen\n";
-        std::cout << "  exit        - Exits the terminal\n";
-        std::cout << "  echo [text] - Outputs the specified text\n";
-        std::cout << "  time        - Shows the current time\n";
-        std::cout << "  calc        - Starts the Windows calculator\n";
-        std::cout << "  history     - Shows command history\n";
-        std::cout << "  alias       - Shows defined aliases\n";
-        std::cout << "  setalias [alias] [command] - Sets an alias for a command\n";
-        std::cout << "  create [filename] - Creates a file\n";
-        std::cout << "  delete [filename] - Deletes a file\n";
-        std::cout << "  list        - Lists files in the current directory\n";
-        std::cout << "  ping [host] - Executes a ping command\n";
-        std::cout << "  random      - Generates a random number\n";
-        std::cout << "  sleep [seconds] - Pauses execution for a specified number of seconds\n";
+    std::string getCommandInput() {
+        std::string command;
+        char ch;
+        while ((ch = _getch()) != '\r') {
+            if (ch == '\b') {
+                if (!command.empty()) {
+                    command.pop_back();
+                    std::cout << "\b \b";
+                }
+            } else if (ch == -32) {
+                char arrowKey = _getch();
+                if (arrowKey == 72 && historyIndex < (int)commandHistory.size() - 1) {
+                    historyIndex++;
+                    command = commandHistory[commandHistory.size() - 1 - historyIndex];
+                    std::cout << "\rAether > " << command << std::string(50, ' ');
+                } else if (arrowKey == 80 && historyIndex >= 0) {
+                    historyIndex--;
+                    command = (historyIndex == -1) ? "" : commandHistory[commandHistory.size() - 1 - historyIndex];
+                    std::cout << "\rAether > " << command << std::string(50, ' ');
+                }
+            } else {
+                command.push_back(ch);
+                std::cout << ch;
+            }
+        }
         std::cout << std::endl;
+        return command;
+    }
+
+    void addCommandToHistory(const std::string& command) {
+        commandHistory.push_back(command);
+        historyIndex = -1;
     }
 
     void executeCommand(const std::string& command) {
         if (command == "help") {
             printHelp();
-            return;
         } else if (command == "cls") {
             system("cls");
-            return;
         } else if (command.substr(0, 5) == "echo ") {
             std::cout << command.substr(5) << std::endl;
-            return;
         } else if (command == "time") {
-            SYSTEMTIME st;
-            GetLocalTime(&st);
-            std::cout << "Current time: " << st.wHour << ":" << st.wMinute << ":" << st.wSecond << std::endl;
-            return;
+            displayCurrentTime();
         } else if (command == "calc") {
             system("start calc");
-            return;
         } else if (command == "history") {
             printHistory();
-            return;
         } else if (command == "alias") {
             printAliases();
-            return;
         } else if (command.substr(0, 8) == "setalias ") {
             setAlias(command.substr(8));
-            return;
         } else if (command.substr(0, 6) == "create ") {
             createFile(command.substr(7));
-            return;
         } else if (command.substr(0, 7) == "delete ") {
             deleteFile(command.substr(7));
-            return;
         } else if (command == "list") {
             listFiles();
-            return;
         } else if (command.substr(0, 5) == "ping ") {
             pingHost(command.substr(5));
-            return;
         } else if (command == "random") {
             generateRandomNumber();
-            return;
         } else if (command.substr(0, 6) == "sleep ") {
             sleepForSeconds(command.substr(6));
-            return;
-        }
-
-        
-        if (aliases.find(command) != aliases.end()) {
-            executeCommand(aliases[command]);
-            return;
-        }
-
-        
-        STARTUPINFOW si;
-        PROCESS_INFORMATION pi;
-        ZeroMemory(&si, sizeof(si));
-        si.cb = sizeof(si);
-        ZeroMemory(&pi, sizeof(pi));
-
-        std::wstring wcommand = L"cmd.exe /C " + std::wstring(command.begin(), command.end());
-
-        wchar_t wcmd[512];
-        wcsncpy(wcmd, wcommand.c_str(), sizeof(wcmd) / sizeof(wchar_t));
-
-        if (CreateProcessW(NULL, wcmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-            WaitForSingleObject(pi.hProcess, INFINITE);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
+        } else if (command == "theme") {
+            switchTheme();
+        } else if (command.substr(0, 8) == "calculator") {
+            launchCalculator(command.substr(9));
+        } else if (command.substr(0, 10) == "writefile ") {
+            writeToFile(command.substr(10));
+        } else if (command.substr(0, 9) == "readfile ") {
+            readFromFile(command.substr(9));
         } else {
-            setConsoleColor(12, 0); 
-            DWORD errorCode = GetLastError();
-            std::cerr << "⚠️  Error: Command could not be executed! Error code: " << errorCode << std::endl;
-            setConsoleColor(7, 0); 
+            runCommand(command);
         }
     }
 
-    void setAlias(const std::string& aliasCommand) {
-        std::istringstream iss(aliasCommand);
-        std::string alias, command;
-        if (iss >> alias) {
-            std::getline(iss, command);
-            command.erase(0, command.find_first_not_of(" ")); 
-            aliases[alias] = command;
-            std::cout << "Alias '" << alias << "' set for: " << command << std::endl;
-        } else {
-            std::cout << "Invalid alias command. Use: setalias [alias] [command]" << std::endl;
+    void displayCurrentTime() {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        std::cout << "Current time: " << std::setw(2) << std::setfill('0') << st.wHour << ":" 
+                  << std::setw(2) << std::setfill('0') << st.wMinute << ":" 
+                  << std::setw(2) << std::setfill('0') << st.wSecond << std::endl;
+    }
+
+    void launchCalculator(const std::string& calcType) {
+        std::string command = (calcType == "basic") ? "start calc" : "start calc";
+        system(command.c_str());
+    }
+
+    void writeToFile(const std::string& filename) {
+        size_t pos = filename.find(" ");
+        if (pos == std::string::npos) {
+            std::cout << "Usage: writefile <filename> <text>\n";
+            return;
         }
+        std::string text = filename.substr(pos + 1);
+        std::string file = filename.substr(0, pos);
+        std::ofstream outFile(file);
+        if (outFile.is_open()) {
+            outFile << text;
+            std::cout << "Text written to file '" << file << "'\n";
+        } else {
+            std::cerr << "Error: Unable to write to file '" << file << "'.\n";
+        }
+    }
+
+    void readFromFile(const std::string& filename) {
+        std::ifstream inFile(filename);
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                std::cout << line << std::endl;
+            }
+            inFile.close();
+        } else {
+            std::cerr << "Error: Unable to read from file '" << filename << "'.\n";
+        }
+    }
+
+    void switchTheme() {
+        std::cout << "Choose a theme: (1) Dark, (2) Light\n";
+        std::string choice;
+        std::getline(std::cin, choice);
+        if (choice == "1") {
+            currentTheme["promptTextColor"] = 10;
+            currentTheme["promptBgColor"] = 0;
+            currentTheme["defaultTextColor"] = 7;
+            currentTheme["defaultBgColor"] = 0;
+            std::cout << "Switched to Dark Theme.\n";
+        } else if (choice == "2") {
+            currentTheme["promptTextColor"] = 0;
+            currentTheme["promptBgColor"] = 7;
+            currentTheme["defaultTextColor"] = 0;
+            currentTheme["defaultBgColor"] = 7;
+            std::cout << "Switched to Light Theme.\n";
+        }
+    }
+
+    void printHelp() {
+        std::cout << "Available commands:\n";
+        std::cout << "help    - Show this help message\n";
+        std::cout << "cls     - Clear the terminal\n";
+        std::cout << "exit    - Exit the terminal\n";
+        std::cout << "echo    - Echo back the input text\n";
+        std::cout << "time    - Show the current time\n";
+        std::cout << "calc    - Launch calculator\n";
+        std::cout << "history  - Show command history\n";
+        std::cout << "alias   - Show aliases\n";
+        std::cout << "setalias <alias>=<command> - Create an alias\n";
+        std::cout << "create <filename> - Create a new file\n";
+        std::cout << "delete <filename> - Delete a file\n";
+        std::cout << "list    - List files in the current directory\n";
+        std::cout << "ping <host> - Ping a host\n";
+        std::cout << "random  - Generate a random number\n";
+        std::cout << "sleep <seconds> - Sleep for a specified duration\n";
+        std::cout << "theme   - Change terminal theme\n";
+        std::cout << "writefile <filename> <text> - Write text to a file\n";
+        std::cout << "readfile <filename> - Read text from a file\n";
     }
 
     void printHistory() {
-        setConsoleColor(7, 0);
-        std::cout << "Command history:\n";
+        std::cout << "Command History:\n";
         for (const auto& cmd : commandHistory) {
-            std::cout << "  " << cmd << std::endl;
+            std::cout << " - " << cmd << std::endl;
         }
-        std::cout << std::endl;
     }
 
     void printAliases() {
-        setConsoleColor(7, 0);
-        std::cout << "Defined aliases:\n";
+        std::cout << "Aliases:\n";
         for (const auto& pair : aliases) {
-            std::cout << "  " << pair.first << " -> " << pair.second << std::endl;
+            std::cout << " - " << pair.first << " -> " << pair.second << std::endl;
         }
-        std::cout << std::endl;
+    }
+
+    void setAlias(const std::string& command) {
+        size_t pos = command.find("=");
+        if (pos != std::string::npos) {
+            std::string alias = command.substr(0, pos);
+            std::string cmd = command.substr(pos + 1);
+            aliases[alias] = cmd;
+            std::cout << "Alias set: " << alias << " -> " << cmd << std::endl;
+        } else {
+            std::cout << "Usage: setalias <alias>=<command>\n";
+        }
     }
 
     void createFile(const std::string& filename) {
-        std::ofstream file(filename);
-        if (file) {
-            std::cout << "File '" << filename << "' created." << std::endl;
+        std::ofstream outFile(filename);
+        if (outFile) {
+            std::cout << "File '" << filename << "' created.\n";
         } else {
-            std::cerr << "Error creating file '" << filename << "'." << std::endl;
+            std::cerr << "Error: Unable to create file '" << filename << "'.\n";
         }
     }
 
     void deleteFile(const std::string& filename) {
         if (fs::remove(filename)) {
-            std::cout << "File '" << filename << "' deleted." << std::endl;
+            std::cout << "File '" << filename << "' deleted.\n";
         } else {
-            std::cerr << "Error deleting file '" << filename << "'." << std::endl;
+            std::cerr << "Error: Unable to delete file '" << filename << "'.\n";
         }
     }
 
-        void listFiles() {
+    void listFiles() {
         std::cout << "Files in the current directory:\n";
         for (const auto& entry : fs::directory_iterator(fs::current_path())) {
-            std::cout << "  " << entry.path().filename().string() << std::endl;
+            std::cout << " - " << entry.path().filename().string() << std::endl;
         }
-        std::cout << std::endl;
     }
 
     void pingHost(const std::string& host) {
@@ -251,17 +327,21 @@ private:
     }
 
     void generateRandomNumber() {
-        std::random_device rd;  
-        std::mt19937 gen(rd()); 
-        std::uniform_int_distribution<> dis(1, 100); 
-        std::cout << "Random number: " << dis(gen) << std::endl;
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> distr(1, 100);
+        std::cout << "Random number: " << distr(gen) << std::endl;
     }
 
     void sleepForSeconds(const std::string& secondsStr) {
         int seconds = std::stoi(secondsStr);
         std::cout << "Sleeping for " << seconds << " seconds...\n";
         std::this_thread::sleep_for(std::chrono::seconds(seconds));
-        std::cout << "Awake!" << std::endl;
+        std::cout << "Awake!\n";
+    }
+
+    void runCommand(const std::string& command) {
+        system(command.c_str());
     }
 };
 

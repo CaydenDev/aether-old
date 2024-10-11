@@ -1,0 +1,4 @@
+copy=copy
+ll=dir /w
+move=move
+open=start

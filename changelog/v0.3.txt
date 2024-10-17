@@ -1,0 +1,29 @@
+Changelog: Aether Terminal
+
+New Features and Improvements:
+1. Added a TaskManager class for managing background tasks.
+2. Implemented a more comprehensive HelpCommand class with detailed command descriptions.
+3. Added new commands: base64, hash, math, sort, network, sysinfo, weather.
+4. Improved error handling and user feedback for various commands.
+5. Enhanced the 'help' command to provide more detailed information about each command.
+
+Code Structure and Organization:
+1. Moved the Command class definition to a separate header file.
+2. Implemented a map of command descriptions in the HelpCommand class.
+3. Reorganized the Terminal class to improve readability and maintainability.
+
+Performance Optimizations:
+1. Used std::unique_ptr for managing Command objects in the Terminal class.
+2. Implemented a thread-safe TaskManager for handling background tasks.
+
+Language and Output Changes:
+1. Changed most of the output messages from English to German.
+2. Updated the welcome message and command descriptions to reflect the new language.
+
+Bug Fixes and Minor Improvements:
+1. Fixed potential memory leaks by using smart pointers.
+2. Improved error handling in file operations.
+3. Enhanced the robustness of the command parsing and execution process.
+
+Dependencies and Libraries:
+1. Added new header includes: <queue>, <mutex>, <condition_variable>, <atomic>, <optional>, <variant>, <any>, <charconv>, <bitset>, <numeric>
